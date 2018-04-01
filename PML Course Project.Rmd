@@ -1,0 +1,92 @@
+---
+title: "Coursera Practical Machine Learning Course Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+The project assignment was to look at data coming from accelerometers and predict the type of movement a person is doing from the movement data captured by their device. In this study the movements were known and the data was classified based on the known activity. 
+
+## Getting and Cleaning Data
+
+Two data sets were provided, one with testing data and another with training. In reality the testing data was not true testing data as it did not have the outcome. In order to ensure proper cross validaiton was done,  the first step then was to separate the training data into training and testing sets so that out of sample error could be measured. 
+Once that was complete I began analysis on the training data set. Looking at the data there 160 variables, but a large number of them appeared to be mostly empty (str funtion call omitted for brevity). Here are two examples:
+
+```{r echo = FALSE, results='hide', message=FALSE, warning=FALSE}
+library(caret)
+set.seed(302)
+training<- read.table("C:\\Users\\cm\\Downloads\\pml-training.csv", sep=",", header=TRUE)
+
+
+inTrain = createDataPartition(training$classe, p = 3/4)[[1]]
+
+training2 = training[ inTrain,]
+
+testing = training[-inTrain,]
+
+
+```
+
+```{r  echo=TRUE}
+set.seed(302)
+nrow(training2)
+table(training2$max_roll_dumbbell=="")
+table(is.na(training2$var_accel_forearm)   )
+```
+```{r echo = FALSE, results='hide', message=FALSE, warning=FALSE}
+selectC<-
+  c("roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z","classe")
+
+training3<- training2[,selectC]
+
+
+
+```
+From the above we can see that out of the ~14000 observations only around 300 of them have values that are not NA or blank. I went ahead and removed all columns that had this issue leaving me with a dataset with 53 columns including the outcome. 
+
+#Principal Component analysis
+
+Given that are a lot of features in this dataset the next step was to figure out which ones were the most important. To that end I ran a principal components analysis. The following results were given:
+
+
+```{r  echo=TRUE}
+pca1<-prcomp(training3[,-53], scale=TRUE)
+varr <- pca1$sdev^2
+percvar <- varr/sum(varr)
+prinComp<- pca1$x
+plot(cumsum(percvar), xlab = "Principal Component",
+     ylab = "Cumulative Percentage",
+     type = "b")
+```
+
+From the above plot the first 30 or so features explain 98% of the variance in the test set. I chose those first 30 columns as the set of features to use for prediction. 
+
+## Model - Random Forest
+
+The next step was to run a random forest model, fit the pca and the model to the test set and measure the out of sample error. 
+
+```{r  echo=TRUE , message=FALSE, warning=FALSE}
+library(randomForest)
+fit<- randomForest(x=prinComp[,1:30],y=training3$classe)
+testing2<-  predict(pca1,newdata=testing)
+pred1<-predict(fit, testing2[,1:30])
+confusionMatrix(pred1, testing$classe)
+```
+
+From the confusion matrix above the out of sample numbers for accuracy, sensitivty and specificity, postivie predictive values, and negative predictive value are all above 97%. The kappa is also above 97% indicating that the predicitive value is not simply due to random chance. The overall out of sample error rate is <3% on the testing datset. Here is a plot of the confusion matrix:
+```{r echo = FALSE, results='hide', message=FALSE, warning=FALSE}
+ConfusionMatix<- confusionMatrix(pred1, testing$classe)
+plot(ConfusionMatix$table)
+```
+
+
+## Conclusion
+
+In order to predict the class based on the movement data I first separated the training data into training and testing sets so I could measure the out of sample error. I then used the training data to profile the data and remove columns were low information. 
+
+Since I had a large number of features I chose principal components analysis to get a better sense of the variance explained by each feature and chose the top 30 principal components. Finally, because I had a dataset with a large number of features and a categorical outcome I used a random forest as my prediction algorithm. I evalated that against the test set I created earlier and was happy with the small out of sample error.  
+
